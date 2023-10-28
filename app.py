@@ -3,8 +3,6 @@ import requests
 import pprint
 import re
 
-
-pp = pprint.PrettyPrinter()
 api_key = st.secrets.hf_credentials.hf_api
 
 model_id = "meta-llama/Llama-2-13b-chat-hf"
