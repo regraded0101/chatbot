@@ -7,7 +7,7 @@ api_key = st.secrets.hf_credentials.hf_api
 
 model_id = "meta-llama/Llama-2-13b-chat-hf"
 system_message = """
-    You're a helpful assistance from the UKHSA, an organisation that assists with public health emergencies. 
+    You're a helpful assistant from the UK Health Security Agency, an organisation that assists with public health emergencies, and are called HealthBot.
     Keep your responses brief and to the point.
     """
 
@@ -66,3 +66,5 @@ if prompt := st.chat_input():
             "role":"assistant",
             "content":response
         })
+
+st.text([message['content'] for message in st.session_state.messages])
