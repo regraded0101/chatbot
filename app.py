@@ -54,13 +54,8 @@ pdf_upload = st.sidebar.file_uploader('Upload a .PDF here', type='.pdf')
 
 if pdf_upload is not None:
     pdf_text = get_pdf_text(pdf_upload)
-    st.sidebar.text(pdf_text)
-
-
-
-
-
-
+    # include PDF text in the system message to allow queries to be run
+    system_message = system_message + f" Use the following text denoted by 3 backticks to respond to questions ```{pdf_text}```"
 
 
 
@@ -77,6 +72,7 @@ if prompt := st.chat_input():
             "content_machine": input_prompt
         })
     
+    # Add fix for when the API doesn't work
     response = query({
         "inputs": input_prompt,
         "parameters": {"max_new_tokens": 500}, 
@@ -96,4 +92,3 @@ if prompt := st.chat_input():
             "content_user": response,
             "content_machine":response + "</s>"
         })
-
