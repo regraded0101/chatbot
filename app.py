@@ -39,6 +39,9 @@ def prompt_generator(system_message, user_message):
 # Pattern to clean up text response from API
 pattern = r'.*\[/INST\]([\s\S]*)$'
 
+accuracy_input = st.sidebar.select_slider(" ", ["Accurate", "Creative"]) 
+
+
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -49,14 +52,16 @@ for message in st.session_state.messages:
         st.markdown(message["content_user"])
 
 # Include PDF upload ability
-pdf_upload = st.sidebar.file_uploader('Upload a .PDF here', type='.pdf')
+pdf_upload = st.sidebar.file_uploader(
+    'Upload a .PDF here', 
+    type='.pdf',
+    )
 
 
 if pdf_upload is not None:
     pdf_text = get_pdf_text(pdf_upload)
     # include PDF text in the system message to allow queries to be run
     system_message = system_message + f" Use the following text denoted by 3 backticks to respond to questions ```{pdf_text}```"
-
 
 
 # render user prompt
@@ -72,13 +77,21 @@ if prompt := st.chat_input():
             "content_machine": input_prompt
         })
     
-    # Add fix for when the API doesn't work
-    response = query({
-        "inputs": input_prompt,
-        "parameters": {"max_new_tokens": 500}, 
-        }, 
-        model_id)
-    response = response[0]['generated_text']
+    try:
+        response = query({
+            "inputs": input_prompt,
+            "parameters": {
+                "max_new_tokens": 500,
+                "temperature":0.1 if accuracy_input != "Creative" else 1
+                }, 
+            }, 
+            model_id)
+        
+        response = response[0]['generated_text']
+
+    except:
+        response = "Unable to connect to model. Try again later"
+
 
     # Clean up API response text
     match = re.search(pattern, response, re.MULTILINE | re.DOTALL)
