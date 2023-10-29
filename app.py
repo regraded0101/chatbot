@@ -18,20 +18,25 @@ def query(payload, model_id):
 	return response.json()
 
 def prompt_generator(system_message, user_message):
-    return f"""
-    <s>[INST] <<SYS>>
-    {system_message}
-    <</SYS>>
+    # check if prompt is initial or not and provide the system_message if True
+    if len(st.session_state.messages) != 0:
+         return f"""
+         {' '.join([message['content_machine'] for message in st.session_state.messages])}
+         <s>[INST]
+         {user_message}
+         [/INST]
+         """
+    else:
+        return f"""
+        <s>[INST] <<SYS>>
+        {system_message}
+        <</SYS>>
+        {user_message} [/INST]
+        """
 
-    {user_message} [/INST]
-    """
 
 # Pattern to clean up text response from API
-pattern = r'\[/INST\]\n*([\s\S]+)'
-
-
-
-
+pattern = r'.*\[/INST\]([\s\S]*)$'
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -40,31 +45,38 @@ if "messages" not in st.session_state:
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        st.markdown(message["content_user"])
 
+# render user prompt
 if prompt := st.chat_input():
     with st.chat_message('user'):
         st.markdown(prompt)
-        st.session_state.messages.append({
-            "role":"user",
-            "content":prompt
-        })
 
+
+    input_prompt = prompt_generator(system_message, prompt)
+    st.session_state.messages.append({
+            "role":"user",
+            "content_user": prompt,
+            "content_machine": input_prompt
+        })
+    
     response = query({
-        "inputs": prompt_generator(system_message, prompt),
+        "inputs": input_prompt,
         "parameters": {"max_new_tokens": 500}, 
         }, 
         model_id)
-    
     response = response[0]['generated_text']
 
     # Clean up API response text
-    response = re.findall(pattern, response)[0]
+    match = re.search(pattern, response, re.MULTILINE | re.DOTALL)
+    if match:
+        response = match.group(1).strip()
+
     with st.chat_message('assistant'):
         st.markdown(response)
         st.session_state.messages.append({
             "role":"assistant",
-            "content":response
+            "content_user": response,
+            "content_machine":response + "</s>"
         })
 
-st.text([message['content'] for message in st.session_state.messages])
