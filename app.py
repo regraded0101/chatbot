@@ -38,7 +38,20 @@ def prompt_generator(system_message, user_message):
 
 # Pattern to clean up text response from API
 pattern = r'.*\[/INST\]([\s\S]*)$'
+model_label_converter = {
+    'meta-llama/Llama-2-7b-chat-hf':'Llama 2 7b',
+    'meta-llama/Llama-2-13b-chat-hf':'Llama 2 13b',
+    'meta-llama/Llama-2-70b-chat-hf':'Llama 2 70b',
+}
 
+model_id = st.sidebar.selectbox('Select model:', options=[
+    'meta-llama/Llama-2-7b-chat-hf',
+    'meta-llama/Llama-2-13b-chat-hf',
+    'meta-llama/Llama-2-70b-chat-hf'
+    ],
+    index=1,
+    format_func = lambda x: model_label_converter.get(x)
+)
 accuracy_input = st.sidebar.select_slider(" ", ["Accurate", "Creative"]) 
 
 
