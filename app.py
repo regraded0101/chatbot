@@ -2,8 +2,7 @@ import streamlit as st
 import requests
 import pprint
 import re
-
-from pdfminer.high_level import extract_text
+from pdfParser import get_pdf_text
 
 api_key = st.secrets.hf_credentials.hf_api
 
@@ -50,10 +49,20 @@ for message in st.session_state.messages:
         st.markdown(message["content_user"])
 
 # Include PDF upload ability
-# pdf_upload = st.sidebar.file_uploader('Upload a .PDF here', type='.pdf')
-# if pdf_upload is not None:
-#     pdf_text = extract_text(pdf_upload)
-#     st.sidebar.text(pdf_text)
+pdf_upload = st.sidebar.file_uploader('Upload a .PDF here', type='.pdf')
+
+
+if pdf_upload is not None:
+    pdf_text = get_pdf_text(pdf_upload)
+    st.sidebar.text(pdf_text)
+
+
+
+
+
+
+
+
 
 # render user prompt
 if prompt := st.chat_input():
