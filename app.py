@@ -2,33 +2,28 @@ import streamlit as st
 import requests
 import pprint
 import re
+import pickle
 from pdfParser import get_pdf_text
 
 api_key = st.secrets.hf_credentials.hf_api
 
 model_id = "meta-llama/Llama-2-13b-chat-hf"
 system_message = """
-    You're a helpful assistant from the UK Health Security Agency, an organisation that assists with public health emergencies, and are called HealthBot.
-    Keep your responses brief and to the point.
+    Your role is to take PDF documents and extract their raw text into a table format that can be uploaded into a database.
+    Return the table only. For example if you need to extract information about a report written on 2nd February 2011 with an author called Jane Mary then return this only: 
+    | report_written_date | author_name | \n | --- | --- | \n | 02/02/2011 | Jane Mary |
     """
 
+
 def query(payload, model_id):
-	headers = {"Authorization": f"Bearer {api_key}"}
-	API_URL = f"https://api-inference.huggingface.co/models/{model_id}"
-	response = requests.post(API_URL, headers=headers, json=payload)
-	return response.json()
+    headers = {"Authorization": f"Bearer {api_key}"}
+    API_URL = f"https://api-inference.huggingface.co/models/{model_id}"
+    response = requests.post(API_URL, headers=headers, json=payload)
+    return response.json()
+
 
 def prompt_generator(system_message, user_message):
-    # check if prompt is initial or not and provide the system_message if True
-    if len(st.session_state.messages) != 0:
-         return f"""
-         {' '.join([message['content_machine'] for message in st.session_state.messages])}
-         <s>[INST]
-         {user_message}
-         [/INST]
-         """
-    else:
-        return f"""
+    return f"""
         <s>[INST] <<SYS>>
         {system_message}
         <</SYS>>
@@ -37,84 +32,66 @@ def prompt_generator(system_message, user_message):
 
 
 # Pattern to clean up text response from API
-pattern = r'.*\[/INST\]([\s\S]*)$'
-model_label_converter = {
-    'meta-llama/Llama-2-7b-chat-hf':'Llama 2 7b',
-    'meta-llama/Llama-2-13b-chat-hf':'Llama 2 13b',
-    'meta-llama/Llama-2-70b-chat-hf':'Llama 2 70b',
-}
-
-model_id = st.sidebar.selectbox('Select model:', options=[
-    'meta-llama/Llama-2-7b-chat-hf',
-    'meta-llama/Llama-2-13b-chat-hf',
-    'meta-llama/Llama-2-70b-chat-hf'
-    ],
-    index=1,
-    format_func = lambda x: model_label_converter.get(x)
-)
-accuracy_input = st.sidebar.select_slider(" ", ["Accurate", "Creative"]) 
-
+pattern = r".*\[/INST\]([\s\S]*)$"
 
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat messages from history on app rerun
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content_user"])
-
 # Include PDF upload ability
-pdf_upload = st.sidebar.file_uploader(
-    'Upload a .PDF here', 
-    type='.pdf',
-    )
-
+pdf_upload = st.file_uploader(
+    "Upload a .PDF here",
+    type=".pdf",
+)
 
 if pdf_upload is not None:
     pdf_text = get_pdf_text(pdf_upload)
-    # include PDF text in the system message to allow queries to be run
-    system_message = system_message + f" Use the following text denoted by 3 backticks to respond to questions ```{pdf_text}```"
 
 
-# render user prompt
-if prompt := st.chat_input():
-    with st.chat_message('user'):
-        st.markdown(prompt)
+if "key_inputs" not in st.session_state:
+    st.session_state.key_inputs = {}
 
+col1, col2, col3 = st.columns([3, 3, 2])
 
-    input_prompt = prompt_generator(system_message, prompt)
-    st.session_state.messages.append({
-            "role":"user",
-            "content_user": prompt,
-            "content_machine": input_prompt
-        })
-    
-    try:
-        response = query({
-            "inputs": input_prompt,
-            "parameters": {
-                "max_new_tokens": 500,
-                "temperature":0.1 if accuracy_input != "Creative" else 1
-                }, 
-            }, 
-            model_id)
-        
-        response = response[0]['generated_text']
+with col1:
+    key_name = st.text_input("Key/Column Name (e.g. patient_name)", key="key_name")
 
-    except:
-        response = "Unable to connect to model. Try again later"
+with col2:
+    key_description = st.text_area(
+        "*(Optional) Description of key/column", key="key_description"
+    )
 
+with col3:
+    if st.button("Extract this column"):
+        if key_description:
+            st.session_state.key_inputs[key_name] = key_description
+        else:
+            st.session_state.key_inputs[key_name] = "No further description provided"
 
-    # Clean up API response text
-    match = re.search(pattern, response, re.MULTILINE | re.DOTALL)
-    if match:
-        response = match.group(1).strip()
+if st.session_state.key_inputs:
+    keys_title = st.write("\nKeys/Columns for extraction:")
+    keys_values = st.write(st.session_state.key_inputs)
 
-    with st.chat_message('assistant'):
-        st.markdown(response)
-        st.session_state.messages.append({
-            "role":"assistant",
-            "content_user": response,
-            "content_machine":response + "</s>"
-        })
+    if st.button("Extract data!"):
+        user_message = f"""
+            Use the text provided and denoted by 3 backticks ```{pdf_text}```. 
+            Extract the following columns and return a table that could be uploaded to an SQL database. 
+            {'; '.join([key + ': ' + st.session_state.key_inputs[key] for key in st.session_state.key_inputs])}
+        """
+        the_prompt = prompt_generator(
+            system_message=system_message, user_message=user_message
+        )
+        response = query(
+            {
+                "inputs": the_prompt,
+                "parameters": {"max_new_tokens": 500, "temperature": 0.1},
+            },
+            model_id,
+        )
+        match = re.search(
+            pattern, response[0]["generated_text"], re.MULTILINE | re.DOTALL
+        )
+        if match:
+            response = match.group(1).strip()
+
+        st.markdown(f"Data Extracted!\n{response}")
